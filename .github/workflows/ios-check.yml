@@ -1,0 +1,42 @@
+name: Check iOS build
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Upstream patches this version's Go runtime; do not use latest Go.
+          go-version: '1.19.13'
+          cache-dependency-path: Sources/WireGuardKitGo/go.sum
+      - name: Configure unsigned build
+        run: python3 scripts/configure-ci.py
+      - name: Check signing workflow syntax
+        run: ruby -c fastlane/Fastfile
+      - name: Test switch policy
+        run: |
+          swiftc Sources/Shared/Model/AutoSwitchPolicy.swift Tests/AutoSwitchPolicyTests.swift -o "$RUNNER_TEMP/policy-tests"
+          "$RUNNER_TEMP/policy-tests"
+      - name: Build app and VPN extension for iPhone
+        run: |
+          set -o pipefail
+          xcodebuild -project WireGuard.xcodeproj -scheme JazzWG -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO ENABLE_USER_SCRIPT_SANDBOXING=NO build 2>&1 | tee build.log
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: build.log

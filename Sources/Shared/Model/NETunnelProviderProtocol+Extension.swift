@@ -25,6 +25,11 @@ extension NETunnelProviderProtocol {
         #if os(macOS)
         providerConfiguration = ["UID": getuid()]
         #endif
+        if let reference = (old as? NETunnelProviderProtocol)?.providerConfiguration?[AutoSwitchConfiguration.referenceKey] as? Data {
+            var values = providerConfiguration ?? [:]
+            values[AutoSwitchConfiguration.referenceKey] = reference
+            providerConfiguration = values
+        }
 
         let endpoints = tunnelConfiguration.peers.compactMap { $0.endpoint }
         if endpoints.count == 1 {
@@ -48,6 +53,9 @@ extension NETunnelProviderProtocol {
     }
 
     func destroyConfigurationReference() {
+        if let reference = providerConfiguration?[AutoSwitchConfiguration.referenceKey] as? Data {
+            Keychain.deleteReference(called: reference)
+        }
         guard let ref = passwordReference else { return }
         Keychain.deleteReference(called: ref)
     }

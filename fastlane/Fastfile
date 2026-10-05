@@ -1,0 +1,82 @@
+require "base64"
+
+def required(name)
+  value = ENV[name]
+  UI.user_error!("Missing #{name}. See AUTOSWITCH.md.") if value.nil? || value.strip.empty?
+  value
+end
+
+def apple_api_key
+  app_store_connect_api_key(
+    key_id: required("JAZZWG_API_KEY_ID"),
+    issuer_id: required("JAZZWG_API_ISSUER_ID"),
+    key_content: required("JAZZWG_API_PRIVATE_KEY")
+  )
+end
+
+def bundle_id
+  "com.jazztin98.jazzwg"
+end
+
+def signing(api, readonly:)
+  authorization = Base64.strict_encode64("#{ENV.fetch('GITHUB_REPOSITORY_OWNER', 'jazztin98')}:#{required('JAZZWG_SIGNING_TOKEN')}")
+  puts "::add-mask::#{authorization}" if ENV["GITHUB_ACTIONS"] == "true"
+  match(
+    api_key: api,
+    type: "appstore",
+    team_id: required("JAZZWG_TEAM_ID"),
+    git_url: "https://github.com/jazztin98/JazzWG-Signing.git",
+    git_basic_authorization: authorization,
+    app_identifier: [bundle_id, "#{bundle_id}.network-extension"],
+    readonly: readonly,
+    force: false,
+    verbose: false
+  )
+end
+
+def configure_signing
+  mapping = Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]
+  { "WireGuardiOS" => bundle_id, "WireGuardNetworkExtensioniOS" => "#{bundle_id}.network-extension" }.each do |target, identifier|
+    update_code_signing_settings(
+      path: "WireGuard.xcodeproj",
+      use_automatic_signing: false,
+      team_id: required("JAZZWG_TEAM_ID"),
+      code_sign_identity: "Apple Distribution",
+      profile_name: mapping.fetch(identifier),
+      targets: [target],
+      build_configurations: ["Release"]
+    )
+  end
+end
+
+default_platform(:ios)
+platform :ios do
+  desc "Create signing profiles for JazzWG in the dedicated JazzWG signing repository"
+  lane :provision do
+    setup_ci
+    signing(apple_api_key, readonly: false)
+  end
+
+  desc "Build JazzWG and upload to TestFlight"
+  lane :testflight do
+    setup_ci
+    api = apple_api_key
+    signing(api, readonly: true)
+    configure_signing
+    previous = latest_testflight_build_number(app_identifier: bundle_id, api_key: api, initial_build_number: 0)
+    File.write("Sources/WireGuardApp/Config/Version.xcconfig", "VERSION_NAME = 1.1.0\nVERSION_ID = #{previous + 1}\n")
+    build_app(
+      project: "WireGuard.xcodeproj",
+      scheme: "JazzWG",
+      configuration: "Release",
+      destination: "generic/platform=iOS",
+      export_method: "app-store",
+      export_options: { provisioningProfiles: Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] },
+      xcargs: "ENABLE_USER_SCRIPT_SANDBOXING=NO",
+      output_directory: "build",
+      output_name: "JazzWG.ipa",
+      buildlog_path: "build/logs"
+    )
+    upload_to_testflight(api_key: api, ipa: "build/JazzWG.ipa", skip_waiting_for_build_processing: true)
+  end
+end

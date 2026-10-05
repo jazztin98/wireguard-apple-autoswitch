@@ -115,6 +115,26 @@ class TunnelDetailTableViewController: UITableViewController {
     }
 
     @objc func editTapped() {
+        if tunnel.isAutoSwitch {
+            let alert = UIAlertController(title: "AutoSwitch profile", message: "Choose when this profile connects. Disable on-demand on the original manual profiles to avoid competing rules. To change gateways or thresholds, delete and recreate this profile using + → Create AutoSwitch profile.", preferredStyle: .alert)
+            for (title, option) in [("Connect on Wi-Fi and cellular", ActivateOnDemandOption.anyInterface(.anySSID)),
+                                    ("Connect manually", ActivateOnDemandOption.off)] {
+                alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                    guard let self = self, let config = self.tunnel.tunnelConfiguration else { return }
+                    self.tunnelsManager.modify(tunnel: self.tunnel, tunnelConfiguration: config,
+                        onDemandOption: option, shouldEnsureOnDemandEnabled: option != .off) { error in
+                        if let error = error {
+                            let failure = UIAlertController(title: "Could not save connection rules", message: "\(error)", preferredStyle: .alert)
+                            failure.addAction(UIAlertAction(title: "OK", style: .default))
+                            self.present(failure, animated: true)
+                        }
+                    }
+                })
+            }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            present(alert, animated: true)
+            return
+        }
         PrivateDataConfirmation.confirmAccess(to: tr("iosViewPrivateData")) { [weak self] in
             guard let self = self else { return }
             let editVC = TunnelEditTableViewController(tunnelsManager: self.tunnelsManager, tunnel: self.tunnel)
