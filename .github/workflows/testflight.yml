@@ -17,21 +17,22 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     env:
-      TEAMID: ${{ secrets.TEAMID }}
-      GH_PAT: ${{ secrets.GH_PAT }}
-      FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
-      FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
-      FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
-      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-      APP_ID_IOS: ${{ vars.APP_ID_IOS || 'com.jazztin98.jazzwg' }}
-      MATCH_GIT_URL: ${{ vars.MATCH_GIT_URL || 'https://github.com/jazztin98/Match-Secrets.git' }}
+      # TEAMID is a non-secret identifier consumed by configure-ci.py.
+      TEAMID: ${{ secrets.JAZZWG_TEAM_ID }}
+      JAZZWG_TEAM_ID: ${{ secrets.JAZZWG_TEAM_ID }}
+      JAZZWG_SIGNING_TOKEN: ${{ secrets.JAZZWG_SIGNING_TOKEN }}
+      JAZZWG_API_KEY_ID: ${{ secrets.JAZZWG_API_KEY_ID }}
+      JAZZWG_API_ISSUER_ID: ${{ secrets.JAZZWG_API_ISSUER_ID }}
+      JAZZWG_API_PRIVATE_KEY: ${{ secrets.JAZZWG_API_PRIVATE_KEY }}
+      MATCH_PASSWORD: ${{ secrets.JAZZWG_SIGNING_PASSWORD }}
+      APP_ID_IOS: 'com.jazztin98.jazzwg'
       FASTLANE_SKIP_UPDATE_CHECK: 'true'
       FASTLANE_HIDE_CHANGELOG: 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Validate required secrets
         run: |
-          for name in TEAMID GH_PAT FASTLANE_KEY_ID FASTLANE_ISSUER_ID FASTLANE_KEY MATCH_PASSWORD; do
+          for name in JAZZWG_TEAM_ID JAZZWG_SIGNING_TOKEN JAZZWG_API_KEY_ID JAZZWG_API_ISSUER_ID JAZZWG_API_PRIVATE_KEY MATCH_PASSWORD; do
             if [ -z "${!name}" ]; then echo "::error::Missing $name. Follow AUTOSWITCH.md."; exit 1; fi
           done
       - uses: actions/setup-go@v5

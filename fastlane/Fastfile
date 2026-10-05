@@ -8,24 +8,24 @@ end
 
 def apple_api_key
   app_store_connect_api_key(
-    key_id: required("FASTLANE_KEY_ID"),
-    issuer_id: required("FASTLANE_ISSUER_ID"),
-    key_content: required("FASTLANE_KEY")
+    key_id: required("JAZZWG_API_KEY_ID"),
+    issuer_id: required("JAZZWG_API_ISSUER_ID"),
+    key_content: required("JAZZWG_API_PRIVATE_KEY")
   )
 end
 
 def bundle_id
-  ENV.fetch("APP_ID_IOS", "com.jazztin98.jazzwg")
+  "com.jazztin98.jazzwg"
 end
 
 def signing(api, readonly:)
-  authorization = Base64.strict_encode64("#{ENV.fetch('GITHUB_REPOSITORY_OWNER', 'jazztin98')}:#{required('GH_PAT')}")
+  authorization = Base64.strict_encode64("#{ENV.fetch('GITHUB_REPOSITORY_OWNER', 'jazztin98')}:#{required('JAZZWG_SIGNING_TOKEN')}")
   puts "::add-mask::#{authorization}" if ENV["GITHUB_ACTIONS"] == "true"
   match(
     api_key: api,
     type: "appstore",
-    team_id: required("TEAMID"),
-    git_url: ENV.fetch("MATCH_GIT_URL", "https://github.com/jazztin98/Match-Secrets.git"),
+    team_id: required("JAZZWG_TEAM_ID"),
+    git_url: "https://github.com/jazztin98/JazzWG-Signing.git",
     git_basic_authorization: authorization,
     app_identifier: [bundle_id, "#{bundle_id}.network-extension"],
     readonly: readonly,
@@ -40,7 +40,7 @@ def configure_signing
     update_code_signing_settings(
       path: "WireGuard.xcodeproj",
       use_automatic_signing: false,
-      team_id: required("TEAMID"),
+      team_id: required("JAZZWG_TEAM_ID"),
       code_sign_identity: "Apple Distribution",
       profile_name: mapping.fetch(identifier),
       targets: [target],
@@ -51,7 +51,7 @@ end
 
 default_platform(:ios)
 platform :ios do
-  desc "Create signing profiles for JazzWG using the existing encrypted Match repository"
+  desc "Create signing profiles for JazzWG in the dedicated JazzWG signing repository"
   lane :provision do
     setup_ci
     signing(apple_api_key, readonly: false)

@@ -1,6 +1,6 @@
 # JazzWG AutoSwitch fork
 
-See [AUTOSWITCH.md](AUTOSWITCH.md) for features, setup using your Loop signing workflow, limitations, and verification.
+See [AUTOSWITCH.md](AUTOSWITCH.md) for features, setup with dedicated JazzWG credentials, limitations, and verification.
 
 # [WireGuard](https://www.wireguard.com/) for iOS and macOS
 

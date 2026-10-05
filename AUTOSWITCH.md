@@ -1,6 +1,6 @@
 # JazzWG: LA / Sacramento AutoSwitch
 
-Personal iOS WireGuard fork. Import the existing LA and Sacramento `.conf` files or QR codes on your iPhone. Never commit VPN profiles or private keys to this public repository.
+Personal iOS WireGuard fork with independent build credentials and signing storage. Import the existing LA and Sacramento `.conf` files or QR codes on your iPhone. Never commit VPN profiles or private keys to this public repository.
 
 ## Current behavior
 
@@ -23,11 +23,11 @@ Health depends on Cloudflare availability as well as the VPN. Sleep, iOS extensi
 
 ## GitHub / TestFlight setup
 
-The workflow uses the **same secret names as this account's LoopWorkspace setup**. GitHub secrets cannot be read back or automatically copied between repositories.
+The workflow uses **new credentials dedicated to JazzWG**. Do not copy signing secrets from other apps. Its only signing repository is `jazztin98/JazzWG-Signing`, and it targets only the two JazzWG app IDs. No certificates have been created by these code changes; provisioning happens after you complete the account setup below.
 
 ### 1. Configure Apple identifiers
 
-Default identifiers (optional repository variable `APP_ID_IOS` can replace the app identifier):
+The workflow uses these fixed JazzWG identifiers:
 
 | Item | Identifier | Capabilities |
 | --- | --- | --- |
@@ -37,22 +37,28 @@ Default identifiers (optional repository variable `APP_ID_IOS` can replace the a
 
 Use Apple Developer → Certificates, Identifiers & Profiles to create the explicit app IDs and shared group. Attach the group to **both** IDs before provisioning. Create a new **JazzWG** iOS app record in App Store Connect using the app's bundle ID, your choice of SKU, and English as the primary language. The API key must have access to this new app and permission to manage signing assets.
 
-### 2. Configure repository secrets
+### 2. Create new credentials and a private signing repository
 
-Under **Settings → Secrets and variables → Actions → Repository secrets**, add:
+1. Create a **new private** GitHub repository named `JazzWG-Signing` under `jazztin98`, initialized with a README so it has a default branch. Do not copy certificates, keys or files from another app's signing repository.
+2. Generate a **new fine-grained GitHub token** named `JazzWG Signing`. Select only `JazzWG-Signing` under Repository access, with **Contents: Read and write**. It does not need access to the source repository or any other repository.
+3. In App Store Connect → Users and Access → Integrations → App Store Connect API, create a **new team API key** named `JazzWG Builds` with the Admin role needed for automated signing/provisioning. Download its `.p8` private key, record its Key ID and Issuer ID, and retain the original securely. Apple permits downloading that private key only once. Do not revoke or change another app's API key.
+4. Choose a **new random signing-encryption password** for this repository. Do not reuse another application's password.
+5. In the **wireguard-apple-autoswitch source repository**, under Settings → Secrets and variables → Actions → Repository secrets, add:
 
-| Secret | Value |
+| Secret | New value |
 | --- | --- |
-| `TEAMID` | Your ten-character Apple Developer Team ID |
-| `GH_PAT` | GitHub token with access to the private `jazztin98/Match-Secrets` repository |
-| `FASTLANE_KEY_ID` | App Store Connect API key ID |
-| `FASTLANE_ISSUER_ID` | App Store Connect issuer ID |
-| `FASTLANE_KEY` | Original multiline `.p8` private-key content, as in your Loop setup |
-| `MATCH_PASSWORD` | Password used to encrypt your existing Match signing repository |
+| `JAZZWG_TEAM_ID` | Your ten-character Apple Developer Team ID (the same account identifier is expected) |
+| `JAZZWG_SIGNING_TOKEN` | New token scoped exclusively to the private `JazzWG-Signing` repository |
+| `JAZZWG_API_KEY_ID` | Key ID for the new `JazzWG Builds` API key |
+| `JAZZWG_API_ISSUER_ID` | Issuer ID shown in your App Store Connect account |
+| `JAZZWG_API_PRIVATE_KEY` | New multiline `.p8` private-key content |
+| `JAZZWG_SIGNING_PASSWORD` | New random password for the encrypted JazzWG signing repository |
 
-Use the same original credential values you supplied for Loop, where their scope allows it. Keep Loop's API key and signing assets intact. If your API key is app-restricted, grant it access to JazzWG or create a suitable key. Do not paste private keys, tokens or passwords into chat or source files.
+The Team ID and Issuer ID identify your existing Apple account; they are not new credentials. Team API keys and Apple's certificate quota are account-wide. A new key and separate repository isolate the stored credentials and workflow, but do not create a separate Apple Developer account.
 
-Optional repository variables: `APP_ID_IOS` and `MATCH_GIT_URL`. Change these before creating identifiers if desired. `MATCH_GIT_URL` defaults to the existing private Match repository. The provisioning operation adds JazzWG profiles there and may create a distribution certificate if needed; it does not revoke certificates or run Match nuke.
+Starting with the empty dedicated repository, the **provision** operation creates JazzWG signing assets and saves them there encrypted. If Apple has no free distribution-certificate slots, stop and report the error; do not revoke another app's certificate to make room. The workflow contains no certificate-revocation or Match nuke action. Subsequent TestFlight builds use read-only signing synchronization. Never import another app's certificate into this signing repository.
+
+The signing URL and app IDs are fixed in the workflow/Fastfile so optional variables cannot redirect provisioning to another app. Keep the signing repository private. Do not paste private keys, tokens or passwords into chat or source files.
 
 ### 3. Enable and run Actions
 
