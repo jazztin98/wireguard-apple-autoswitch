@@ -19,12 +19,14 @@ def bundle_id
 end
 
 def signing(api, readonly:)
+  authorization = Base64.strict_encode64("#{ENV.fetch('GITHUB_REPOSITORY_OWNER', 'jazztin98')}:#{required('GH_PAT')}")
+  puts "::add-mask::#{authorization}" if ENV["GITHUB_ACTIONS"] == "true"
   match(
     api_key: api,
     type: "appstore",
     team_id: required("TEAMID"),
     git_url: ENV.fetch("MATCH_GIT_URL", "https://github.com/jazztin98/Match-Secrets.git"),
-    git_basic_authorization: Base64.strict_encode64("#{ENV.fetch('GITHUB_REPOSITORY_OWNER', 'jazztin98')}:#{required('GH_PAT')}"),
+    git_basic_authorization: authorization,
     app_identifier: [bundle_id, "#{bundle_id}.network-extension"],
     readonly: readonly,
     force: false,
