@@ -59,7 +59,11 @@ final class AutoSwitchProbe {
                     if error != nil { self.finish(nil) } else { self.read() }
                 }
             }
-        case .disconnected, .cancelled:
+        case .disconnected:
+            // An orderly HTTP Connection: close may occur while response data is
+            // still buffered. Let the read completion drain it, or hit timeout.
+            if !didWrite { finish(nil) }
+        case .cancelled:
             finish(nil)
         default:
             break
