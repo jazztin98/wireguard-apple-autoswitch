@@ -155,6 +155,19 @@ class TunnelsListTableViewController: UIViewController {
         }
         alert.addAction(createFromScratchAction)
 
+        alert.addAction(UIAlertAction(title: "Create AutoSwitch profile", style: .default) { [weak self] _ in
+            self?.chooseAutoSwitchPrimary()
+        })
+        alert.addAction(UIAlertAction(title: "AutoSwitch status", style: .default) { [weak self] _ in
+            guard let self = self, let manager = self.tunnelsManager else { return }
+            let tunnels = (0..<manager.numberOfTunnels()).map { manager.tunnel(at: $0) }
+            guard let tunnel = tunnels.first(where: { $0.isAutoSwitch && ($0.status == .active || $0.status == .reasserting) }) else {
+                self.showAutoSwitchMessage("Connect an AutoSwitch profile first.")
+                return
+            }
+            tunnel.requestAutoSwitchStatus { [weak self] message in self?.showAutoSwitchMessage(message) }
+        })
+
         let cancelAction = UIAlertAction(title: tr("actionCancel"), style: .cancel)
         alert.addAction(cancelAction)
 
@@ -419,5 +432,77 @@ extension UISplitViewController {
                 showDetailViewController(viewController, sender: sender)
             }
         }
+    }
+}
+
+extension TunnelsListTableViewController {
+    private func showAutoSwitchMessage(_ message: String) {
+        let alert = UIAlertController(title: "AutoSwitch", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func chooseAutoSwitchPrimary() {
+        guard let manager = tunnelsManager else { return }
+        let candidates = (0..<manager.numberOfTunnels()).map { manager.tunnel(at: $0) }
+            .filter { !$0.isAutoSwitch && $0.tunnelConfiguration != nil }
+        guard candidates.count >= 2 else {
+            showAutoSwitchMessage("Import your LA and Sacramento profiles first. This initial version requires full IPv4 tunnels with AllowedIPs = 0.0.0.0/0.")
+            return
+        }
+        chooseAutoSwitchCandidate(title: "Preferred gateway", candidates: candidates) { [weak self] primary in
+            self?.chooseAutoSwitchCandidate(title: "Alternative gateway", candidates: candidates.filter { $0 !== primary }) { [weak self] secondary in
+                self?.configureAutoSwitch(primary: primary, secondary: secondary)
+            }
+        }
+    }
+
+    private func chooseAutoSwitchCandidate(title: String, candidates: [TunnelContainer],
+                                           completion: @escaping (TunnelContainer) -> Void) {
+        let alert = UIAlertController(title: title, message: "Choose an imported profile.", preferredStyle: .alert)
+        for candidate in candidates {
+            alert.addAction(UIAlertAction(title: candidate.name, style: .default) { _ in completion(candidate) })
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func configureAutoSwitch(primary: TunnelContainer, secondary: TunnelContainer) {
+        let alert = UIAlertController(title: "Create AutoSwitch", message:
+            "Tests run through the VPN. After three failures or slow checks, the app tries the other gateway. Trials may interrupt connections. Optional 512 KiB download estimates run at most every 15 minutes and consume data. Set Mbps to 0 to disable them.", preferredStyle: .alert)
+        alert.addTextField { $0.placeholder = "Profile name"; $0.text = "LA + Sacramento Auto" }
+        alert.addTextField { $0.placeholder = "Slow HTTPS response threshold (ms)"; $0.text = "350"; $0.keyboardType = .decimalPad }
+        alert.addTextField { $0.placeholder = "Minimum download estimate (Mbps), 0 = off"; $0.text = "0"; $0.keyboardType = .decimalPad }
+        alert.addAction(UIAlertAction(title: "Create", style: .default) { [weak self, weak alert] _ in
+            guard let self = self, let manager = self.tunnelsManager,
+                  let first = primary.tunnelConfiguration, let second = secondary.tunnelConfiguration,
+                  let name = alert?.textFields?[0].text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+                  let thresholdText = alert?.textFields?[1].text, let threshold = Double(thresholdText),
+                  let speedText = alert?.textFields?[2].text, let minimumMbps = Double(speedText) else {
+                self?.showAutoSwitchMessage("Enter a name and valid numeric thresholds.")
+                return
+            }
+            let settings = AutoSwitchConfiguration(candidates: [
+                .init(name: primary.name, wgQuick: first.asWgQuickConfig()),
+                .init(name: secondary.name, wgQuick: second.asWgQuickConfig())
+            ], latencyThresholdMS: threshold, minimumMbps: minimumMbps)
+            guard settings.validated() else {
+                self.showAutoSwitchMessage("Both profiles must include 0.0.0.0/0. Latency must be 50–10000 ms and speed 0–1000 Mbps. Speed testing also requires ::/0 in both profiles.")
+                return
+            }
+            let auto = TunnelConfiguration(name: name, interface: first.interface, peers: first.peers)
+            manager.add(tunnelConfiguration: auto, autoSwitch: settings) { [weak self] result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success:
+                        self?.showAutoSwitchMessage("Created. Turn on the new AutoSwitch profile. Use + → AutoSwitch status to see its gateway. Recreate it after changing an imported profile; its candidates are saved snapshots.")
+                    case .failure(let error):
+                        self?.showAutoSwitchMessage("Could not create the profile: \(error)")
+                    }
+                }
+            }
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
     }
 }

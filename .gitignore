@@ -49,3 +49,8 @@ Sources/WireGuardApp/Config/Developer.xcconfig
 
 # Vim
 .*.sw*
+
+# Keep the CI scheme in version control
+!WireGuard.xcodeproj/xcshareddata/xcschemes/
+!WireGuard.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+Gemfile.lock

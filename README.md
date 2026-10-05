@@ -1,3 +1,7 @@
+# JazzWG AutoSwitch fork
+
+See [AUTOSWITCH.md](AUTOSWITCH.md) for features, setup using your Loop signing workflow, limitations, and verification.
+
 # [WireGuard](https://www.wireguard.com/) for iOS and macOS
 
 This project contains an application for iOS and for macOS, as well as many components shared between the two of them. You may toggle between the two platforms by selecting the target from within Xcode.

@@ -1,0 +1,63 @@
+name: Build JazzWG for TestFlight
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Create signing profiles first, then build and upload'
+        type: choice
+        options: [provision, testflight]
+        default: testflight
+permissions:
+  contents: read
+concurrency:
+  group: jazzwg-testflight
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      TEAMID: ${{ secrets.TEAMID }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+      FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+      FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      APP_ID_IOS: ${{ vars.APP_ID_IOS || 'com.jazztin98.jazzwg' }}
+      MATCH_GIT_URL: ${{ vars.MATCH_GIT_URL || 'https://github.com/jazztin98/Match-Secrets.git' }}
+      FASTLANE_SKIP_UPDATE_CHECK: 'true'
+      FASTLANE_HIDE_CHANGELOG: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required secrets
+        run: |
+          for name in TEAMID GH_PAT FASTLANE_KEY_ID FASTLANE_ISSUER_ID FASTLANE_KEY MATCH_PASSWORD; do
+            if [ -z "${!name}" ]; then echo "::error::Missing $name. Follow AUTOSWITCH.md."; exit 1; fi
+          done
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.19.13'
+          cache-dependency-path: Sources/WireGuardKitGo/go.sum
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Configure identifiers
+        run: python3 scripts/configure-ci.py
+      - name: Test switch policy
+        run: |
+          swiftc Sources/Shared/Model/AutoSwitchPolicy.swift Tests/AutoSwitchPolicyTests.swift -o "$RUNNER_TEMP/policy-tests"
+          "$RUNNER_TEMP/policy-tests"
+      - name: Create signing profiles
+        if: inputs.operation == 'provision'
+        run: bundle exec fastlane ios provision
+      - name: Build and upload
+        if: inputs.operation == 'testflight'
+        run: bundle exec fastlane ios testflight
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-build-logs
+          path: build/logs
+          if-no-files-found: ignore

@@ -69,6 +69,9 @@ class TunnelsManager {
                 #endif
                 if let ref = passwordRef {
                     refs.insert(ref)
+                    if let reference = proto.providerConfiguration?[AutoSwitchConfiguration.referenceKey] as? Data {
+                        refs.insert(reference)
+                    }
                 } else {
                     wg_log(.info, message: "Removing orphaned tunnel with non-verifying keychain entry: \(tunnelManager.localizedDescription ?? "<unknown>")")
                     tunnelManager.removeFromPreferences { _ in }
@@ -117,7 +120,9 @@ class TunnelsManager {
         }
     }
 
-    func add(tunnelConfiguration: TunnelConfiguration, onDemandOption: ActivateOnDemandOption = .off, completionHandler: @escaping (Result<TunnelContainer, TunnelsManagerError>) -> Void) {
+    func add(tunnelConfiguration: TunnelConfiguration, onDemandOption: ActivateOnDemandOption = .off,
+             autoSwitch: AutoSwitchConfiguration? = nil,
+             completionHandler: @escaping (Result<TunnelContainer, TunnelsManagerError>) -> Void) {
         let tunnelName = tunnelConfiguration.name ?? ""
         if tunnelName.isEmpty {
             completionHandler(.failure(TunnelsManagerError.tunnelNameEmpty))
@@ -131,6 +136,21 @@ class TunnelsManager {
 
         let tunnelProviderManager = NETunnelProviderManager()
         tunnelProviderManager.setTunnelConfiguration(tunnelConfiguration)
+        if let autoSwitch = autoSwitch {
+            guard autoSwitch.validated(),
+                  let data = try? JSONEncoder().encode(autoSwitch),
+                  let json = String(data: data, encoding: .utf8),
+                  let proto = tunnelProviderManager.protocolConfiguration as? NETunnelProviderProtocol,
+                  let reference = Keychain.makeReference(containing: json, called: tunnelName + " autoswitch") else {
+                (tunnelProviderManager.protocolConfiguration as? NETunnelProviderProtocol)?.destroyConfigurationReference()
+                completionHandler(.failure(.systemErrorOnAddTunnel(systemError: NSError(domain: "AutoSwitch", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Unable to save a valid AutoSwitch configuration in the keychain."]))))
+                return
+            }
+            var values = proto.providerConfiguration ?? [:]
+            values[AutoSwitchConfiguration.referenceKey] = reference
+            proto.providerConfiguration = values
+        }
         tunnelProviderManager.isEnabled = true
 
         onDemandOption.apply(on: tunnelProviderManager)
@@ -605,6 +625,28 @@ class TunnelContainer: NSObject {
 
     var tunnelConfiguration: TunnelConfiguration? {
         return tunnelProvider.tunnelConfiguration
+    }
+
+    var isAutoSwitch: Bool {
+        return (tunnelProvider.protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?[AutoSwitchConfiguration.referenceKey] != nil
+    }
+
+    func requestAutoSwitchStatus(_ completion: @escaping (String) -> Void) {
+        guard let session = tunnelProvider.connection as? NETunnelProviderSession,
+              status == .active || status == .reasserting else {
+            completion("Connect the AutoSwitch profile to see its current gateway.")
+            return
+        }
+        do {
+            try session.sendProviderMessage(Data([1])) { data in
+                DispatchQueue.main.async {
+                    completion(data.flatMap { String(data: $0, encoding: .utf8) } ?? "Status unavailable.")
+                }
+            }
+        } catch {
+            completion("Status unavailable: " + error.localizedDescription)
+        }
     }
 
     var onDemandOption: ActivateOnDemandOption {

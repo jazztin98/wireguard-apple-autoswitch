@@ -115,6 +115,12 @@ class TunnelDetailTableViewController: UITableViewController {
     }
 
     @objc func editTapped() {
+        if tunnel.isAutoSwitch {
+            let alert = UIAlertController(title: "AutoSwitch profile", message: "To change gateways or thresholds, delete this AutoSwitch profile and recreate it from your imported profiles using + → Create AutoSwitch profile.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
         PrivateDataConfirmation.confirmAccess(to: tr("iosViewPrivateData")) { [weak self] in
             guard let self = self else { return }
             let editVC = TunnelEditTableViewController(tunnelsManager: self.tunnelsManager, tunnel: self.tunnel)
